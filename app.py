@@ -2,6 +2,7 @@ import os
 import logging
 import ollama
 import chromadb
+from dotenv import load_dotenv
 from fastapi import FastAPI
 
 logging.basicConfig(
@@ -9,27 +10,33 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
 )
 
+load_dotenv()
 MODEL_NAME = os.getenv("MODEL_NAME", "tinyllama")
+HOST = os.getenv("HOST", "http://host.docker.internal:11434")
+use_mock = os.getenv("USE_MOCK_LLM", "0") == "1"
 logging.info(f"Using model: {MODEL_NAME}")
 
 app = FastAPI()
 chroma = chromadb.PersistentClient(path="./db")
 collection = chroma.get_or_create_collection("docs")
-ollama_client = ollama.Client(host="http://host.docker.internal:11434")
+ollama_client = ollama.Client(host=HOST)
 
 @app.post("/query")
 def query(q: str):
-    logging.info(f"/query asked: {q}")
     results = collection.query(query_texts=[q], n_results=1)
     context = results["documents"][0][0] if results["documents"] else ""
 
-    answer = ollama_client.generate(
-        model=MODEL_NAME,
-        prompt=f"Context:\n{context}\n\nQuestion: {q}\n\nAnswer clearly and concisely:"
-    )
-
-
-    return {"answer": answer["response"]}
+    # Check if mock mode is enabled
+    if use_mock:
+        # Return retrieved context directly (deterministic!)
+        return {"answer": context}
+    else:
+        # Use real LLM (production mode)
+        answer = ollama.generate(
+            model=MODEL_NAME,
+            prompt=f"Context:\n{context}\n\nQuestion: {q}\n\nAnswer clearly and concisely:"
+        )
+        return {"answer": answer["response"]}
 
 
 @app.post("/add")
