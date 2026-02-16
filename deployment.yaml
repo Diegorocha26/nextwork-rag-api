@@ -21,3 +21,5 @@ spec:
         env:
         - name: MODEL_NAME
           value: "tinyllama"
+        - name: HOST
+          value: "http://host.docker.internal:11434"
